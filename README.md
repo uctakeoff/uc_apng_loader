@@ -32,7 +32,8 @@ for (auto&& frame : frames) {
 	os << "out" << std::setw(3) << std::setfill('0') << i << ".png";
 	auto outputfile = os.str();
 
-	stbi_write_png(outputfile.c_str(), frame.image.width(), frame.image.height(), 4, frame.image.data(), frame.image.width() * 4);
+	stbi_write_png(outputfile.c_str(), frame.image.width(), frame.image.height(), 4,
+		 frame.image.data(), frame.image.width() * 4);
 	++i;
 }
 ```
@@ -48,7 +49,8 @@ for (uint32_t i = 0; (loader.num_plays() == 0) || (i < loader.num_plays()); ++i)
 		// render frame
 		//
 
-		std::this_thread::sleep_for(std::chrono::microseconds(1000000) * frame.delay_num / frame.delay_den);
+		auto duration = std::chrono::microseconds(1000000) * frame.delay_num / frame.delay_den;
+		std::this_thread::sleep_for(duration);
 	}
 }
 ```
@@ -59,7 +61,7 @@ for (uint32_t i = 0; (loader.num_plays() == 0) || (i < loader.num_plays()); ++i)
 ## Requirements
 
 * C++11 support compiler
-* [stb_image.h]<https://github.com/nothings/stb>
+* [stb_image.h](https://github.com/nothings/stb)
 
 ## Sample Code
 

@@ -16,7 +16,9 @@ http://opensource.org/licenses/mit-license.php
 #include <vector>
 #include <memory>
 #include <string>
-#include "stb_image.h"
+#ifndef STBI_INCLUDE_STB_IMAGE_H
+# include "stb_image.h"
+#endif
 
 #ifndef UC_APNG_LOADER_NO_EXCEPTION
 # define UC_APNG_ASSERT(pred) if (!(pred)) throw uc::apng::exception(std::string(__func__).append(" : ").append(#pred))
@@ -239,7 +241,7 @@ public:
 		UC_APNG_ASSERT(d == BPP);
 	}
 
-	bool empty() const noexcept
+    explicit operator bool() const noexcept
 	{
 		return static_cast<bool>(bin);
 	}
@@ -330,6 +332,7 @@ inline void blend_frame(const image& src, image& dst, const fcTL_payload_t& fcTL
 
 struct frame
 {
+	size_t index;
 	image image;		//!< raw 32bit RGBA image
 	uint16_t delay_num;	//!< Frame delay fraction numerator
 	uint16_t delay_den;	//!< Frame delay fraction denominator
@@ -352,8 +355,7 @@ public:
 			load_one_chunk();
 		}
 		if (eof() && !IDATchunk.empty()) {
-			nowState = state::NORMAL_PNG_LOADED;
-			acTLpayload.num_frames = 1;
+			acTLpayload.num_frames = 1;	// Normal PNG file loaded.
 		}
 	}
 	uint32_t width() const noexcept
@@ -372,54 +374,46 @@ public:
 	{
 		return acTLpayload.num_plays;
 	}
-	bool eof() const
+	bool has_frame() const noexcept
 	{
-		return (nowState == state::IEND_LOADED) || stream_.eof();
+		return frameIndex < num_frames();
 	}
 	frame next_frame()
 	{
-		if (nowState == state::NORMAL_PNG_LOADED) {
-			nowState = state::IEND_LOADED;
-			return frame {constructImage(), 0, 0, true};
-		}
-		const bool firstFrameLoaded = nowState == state::FIRST_FRAME_LOADED;
+		UC_APNG_ASSERT(has_frame());
 		while ((nowState != state::fdAT_LOADED) && !eof()) {
 			load_one_chunk();
 		}
-		if (nowState != state::fdAT_LOADED) {
-			return frame {};
-		}
-		if (!firstFrameLoaded) {
-			fcTLpayload.blend_op = blend_op_t::SOURCE;
-			// If the first `fcTL` chunk uses a `dispose_op` of APNG_DISPOSE_OP_PREVIOUS it should be treated as APNG_DISPOSE_OP_BACKGROUND.
-			if (fcTLpayload.dispose_op == dispose_op_t::PREVIOUS) {
-				fcTLpayload.dispose_op = dispose_op_t::BACKGROUND;
+		frame ret {frameIndex++, construct_image(), fcTLpayload.delay_num, fcTLpayload.delay_den, IDATLoaded};
+
+		if (nowState == state::fdAT_LOADED) {
+			nowState = state::acTL_LOADED;
+			image newFrame = std::move(frameBuffer);
+			if (!newFrame) {
+				newFrame = image(width(), height());
 			}
-			frameBuffer = image(IHDRpayload.width, IHDRpayload.height);
+			switch (fcTLpayload.dispose_op) {
+			// no disposal is done on this frame before rendering the next; the contents of the output buffer are left as is.
+			case dispose_op_t::NONE:
+				blend_frame(ret.image, newFrame, fcTLpayload);
+				frameBuffer = newFrame;
+				break;
+			// the frame's region of the output buffer is to be cleared to fully transparent black before rendering the next frame.
+			case dispose_op_t::BACKGROUND:
+				blend_frame(ret.image, newFrame, fcTLpayload);
+				frameBuffer = image(width(), height());
+				break;
+			// the frame's region of the output buffer is to be reverted to the previous contents before rendering the next frame.
+			case dispose_op_t::PREVIOUS:
+				frameBuffer = newFrame;
+				blend_frame(ret.image, newFrame, fcTLpayload);
+				break;
+			default:
+				throw exception("apng::next_frame : unknown apng::dispose_op_t");
+			}
+			ret.image = std::move(newFrame);
 		}
-		image newFrame = std::move(frameBuffer);
-		const image curImage = constructImage();
-		switch (fcTLpayload.dispose_op) {
-		// no disposal is done on this frame before rendering the next; the contents of the output buffer are left as is.
-		case dispose_op_t::NONE:
-			blend_frame(curImage, newFrame, fcTLpayload);
-			frameBuffer = newFrame;
-			break;
-		// the frame's region of the output buffer is to be cleared to fully transparent black before rendering the next frame.
-		case dispose_op_t::BACKGROUND:
-			blend_frame(curImage, newFrame, fcTLpayload);
-			frameBuffer = image(IHDRpayload.width, IHDRpayload.height);
-			break;
-		// the frame's region of the output buffer is to be reverted to the previous contents before rendering the next frame.
-		case dispose_op_t::PREVIOUS:
-			frameBuffer = newFrame;
-			blend_frame(curImage, newFrame, fcTLpayload);
-			break;
-		default:
-			throw exception("apng::next_frame : unknown apng::dispose_op_t");
-		}
-		nowState = state::FIRST_FRAME_LOADED;
-		return frame{std::move(newFrame), fcTLpayload.delay_num, fcTLpayload.delay_den, IDATLoaded};		
+		return ret;
 	}
 
 private:
@@ -429,11 +423,9 @@ private:
 		acTL_LOADED,
 		fcTL_LOADED,
 		fdAT_LOADED,
-		IEND_LOADED,
-		FIRST_FRAME_LOADED,
-		NORMAL_PNG_LOADED
+		IEND_LOADED
 	};
-	image constructImage() const
+	image construct_image() const
 	{
 		std::vector<uint8_t> data;
 		data.reserve(SIGNATURE.size() + IHDRchunk.size() + IDATchunk.size() + otherChunks.size() + IEND_CHUNK.size());
@@ -443,6 +435,10 @@ private:
 		data.insert(data.end(), otherChunks.begin(), otherChunks.end());
 		data.insert(data.end(), IEND_CHUNK.begin(), IEND_CHUNK.end());
 		return image(data);
+	}
+	bool eof() const
+	{
+		return (nowState == state::IEND_LOADED) || stream_.eof();
 	}
 	void load_one_chunk()
 	{
@@ -466,6 +462,13 @@ private:
 				// modify IHDR chunk
 				set_to_binary<uint32_t>(IHDRchunk.data() + 8,  fcTLpayload.width);
 				set_to_binary<uint32_t>(IHDRchunk.data() + 12, fcTLpayload.height);
+				if (frameIndex == 0) {
+					fcTLpayload.blend_op = blend_op_t::SOURCE;
+					// If the first `fcTL` chunk uses a `dispose_op` of APNG_DISPOSE_OP_PREVIOUS it should be treated as APNG_DISPOSE_OP_BACKGROUND.
+					if (fcTLpayload.dispose_op == dispose_op_t::PREVIOUS) {
+						fcTLpayload.dispose_op = dispose_op_t::BACKGROUND;
+					}
+				}
 			}
 			break;
 		case type::IDAT:
@@ -500,6 +503,7 @@ private:
 	acTL_payload_t acTLpayload {};
 	fcTL_payload_t fcTLpayload {};
 	image frameBuffer;
+	size_t frameIndex = 0;
 	bool IDATLoaded = false;
 };
 

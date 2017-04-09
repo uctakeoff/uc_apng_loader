@@ -38,23 +38,22 @@ template <typename Loader> void test(Loader& loader)
 
 	std::vector<uc::apng::frame> frames;
 	frames.reserve(loader.num_frames());
-	while (!loader.eof() && frames.size() < loader.num_frames()) {
+	while (loader.has_frame()) {
 		frames.push_back(loader.next_frame());
 	}
 
 	for (size_t i = 0; i < frames.size(); i++) {
-		std::ostringstream os;
-		os << "test_data/answer" << std::setw(2) << std::setfill('0') << (i+1) << ".png";
-		auto outputfile = os.str();
+		auto outputfile = "test_data/answer" + std::to_string(i) + ".png";
 		int w, h, d;
 		uc::apng::stbi_ptr answerImage(stbi_load(outputfile.c_str(), &w, &h, &d, STBI_rgb_alpha));
-		std::cout << "  frame " << (i+1) << " / " << frames.size() << " : " 
+		std::cout << "  frame " << i << " / " << frames.size() << " : " 
 			<< "(" << frames[i].image.width() << "x" << frames[i].image.height() << ")"
 			<< " delay=" << frames[i].delay_num << "/" << frames[i].delay_den
 			<< " " << (frames[i].is_default ? "default " : " ")
 			<< " / expected : \"" << outputfile << "\" (" << w << "x" << h << "x" << d <<") ";
 		TEST_ASSERT(answerImage);
 		TEST_ASSERT(frames[i].is_default == (i == 0));
+		TEST_ASSERT(frames[i].index == i);
 		TEST_ASSERT(frames[i].image.width() == w);
 		TEST_ASSERT(frames[i].image.height() == h);
 		TEST_ASSERT(frames[i].delay_num == 75);
@@ -78,17 +77,24 @@ int main(int argc, char** argv)
 		}
 		{
 			auto loader = uc::apng::create_file_loader("test_data/Animated_PNG_example_bouncing_beach_ball0.png");
+			std::cout << "normal png read (" 
+				<< loader.width() << "x" << loader.height() << "), " 
+				<< loader.num_frames() << "frames, " 
+				<< loader.num_plays() << " times to loop.\n";
+
 			TEST_ASSERT(loader.width() == 100);
 			TEST_ASSERT(loader.height() == 100);
 			TEST_ASSERT(loader.num_frames() == 1);
 			TEST_ASSERT(loader.num_plays() == 0);
+			TEST_ASSERT(loader.has_frame());
 			auto frame = loader.next_frame();
-			TEST_ASSERT(loader.eof());
+			TEST_ASSERT(!loader.has_frame());
 
 			int w, h, d;
-			uc::apng::stbi_ptr answerImage(stbi_load("test_data/answer01.png", &w, &h, &d, STBI_rgb_alpha));
+			uc::apng::stbi_ptr answerImage(stbi_load("test_data/answer0.png", &w, &h, &d, STBI_rgb_alpha));
 			TEST_ASSERT(answerImage);
 			TEST_ASSERT(frame.is_default);
+			TEST_ASSERT(frame.index == 0);
 			TEST_ASSERT(frame.image.width() == w);
 			TEST_ASSERT(frame.image.height() == h);
 			TEST_ASSERT(frame.delay_num == 0);

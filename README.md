@@ -35,7 +35,7 @@ for (auto&& frame : frames) {
 }
 ```
 
-### Rendering Animation
+### Render Animation
 
 ```cpp
 for (uint32_t i = 0; (loader.num_plays() == 0) || (i < loader.num_plays()); ++i) {

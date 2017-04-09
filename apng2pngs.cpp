@@ -29,21 +29,19 @@ int main(int argc, char** argv)
 			<< loader.num_frames() << "frames, " 
 			<< loader.num_plays() << " times to loop (0 indicates infinite looping).\n";
 
-        uint32_t i = 0;
-		while (!loader.eof() && i < loader.num_frames()) {
+		while (loader.has_frame()) {
             auto frame = loader.next_frame();
 
 			std::ostringstream os;
-			os << "out" << std::setw(3) << std::setfill('0') << i << ".png";
+			os << "out" << std::setw(3) << std::setfill('0') << frame.index << ".png";
 			auto outputfile = os.str();
 
-            std::cout << " " << (i+1) << " / " << loader.num_frames() << " : \"" << outputfile << "\" "
+            std::cout << " " << frame.index << " / " << loader.num_frames() << " : \"" << outputfile << "\" "
                 << "(" << frame.image.width() << "x" << frame.image.height() << ")"
 				<< " delay=" << frame.delay_num << "/" << frame.delay_den
 				<< " " << (frame.is_default ? "default " : " ") << "\n";
 
 			stbi_write_png(outputfile.c_str(), frame.image.width(), frame.image.height(), 4, frame.image.data(), frame.image.width() * 4);
-            ++i;
 		}
 		std::cout << "all done\n";
 	}catch(std::exception& ex) {

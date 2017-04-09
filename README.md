@@ -18,7 +18,7 @@ std::cout << "\"" << filename << "\" "
 
 ```cpp
 std::vector<uc::apng::frame> frames;
-while (!loader.eof() && (frames.size() < loader.num_frames())) {
+while (loader.has_frame()) {
 	frames.push_back(loader.next_frame());
 }
 ```
@@ -26,15 +26,12 @@ while (!loader.eof() && (frames.size() < loader.num_frames())) {
 ### Write to PNG file (using `stb_image_write.h`)
 
 ```cpp
-size_t i = 0;
 for (auto&& frame : frames) {
-	std::ostringstream os;
-	os << "out" << std::setw(3) << std::setfill('0') << i << ".png";
-	auto outputfile = os.str();
 
-	stbi_write_png(outputfile.c_str(), frame.image.width(), frame.image.height(), 4,
+	auto filename = "out" + std::to_string(frame.index) + ".png";
+
+	stbi_write_png(filename.c_str(), frame.image.width(), frame.image.height(), 4,
 		 frame.image.data(), frame.image.width() * 4);
-	++i;
 }
 ```
 

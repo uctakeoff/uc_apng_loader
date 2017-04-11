@@ -4,7 +4,7 @@ Copyright (c) 2017, Kentaro Ushiyama
 This software is released under the MIT License.
 http://opensource.org/licenses/mit-license.php
 */
-#include"uc_apng_loader.h"
+#include "uc_apng_loader.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION

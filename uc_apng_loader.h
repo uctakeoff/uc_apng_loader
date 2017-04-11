@@ -8,6 +8,9 @@ http://opensource.org/licenses/mit-license.php
 #define UC_APNG_LOADER_H
 #define UC_APNG_LOADER_VERSION "0.1.0"
 #define UC_APNG_LOADER_VERSION_NUM 0x000100
+#ifdef _MSC_VER
+# define _SCL_SECURE_NO_WARNINGS
+#endif
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -235,7 +238,7 @@ public:
 	image(std::vector<uint8_t>& pngBinData)
 	{
 		int w, h, d;
-		bin = stbi_ptr(stbi_load_from_memory(pngBinData.data(), pngBinData.size(), &w, &h, &d, STBI_rgb_alpha));
+		bin = stbi_ptr(stbi_load_from_memory(pngBinData.data(), static_cast<int>(pngBinData.size()), &w, &h, &d, STBI_rgb_alpha));
 		width_ = w;
 		height_ = h;
 		UC_APNG_ASSERT(d == BPP);
@@ -482,7 +485,7 @@ private:
 			if (nowState == state::fcTL_LOADED) {
 				nowState = state::fdAT_LOADED;
 				// pretend to be IDAT chunk.
-				set_to_binary<uint32_t>(chunk.data() + 4, chunk.size() - 16);
+				set_to_binary<uint32_t>(chunk.data() + 4, static_cast<uint32_t>(chunk.size() - 16));
 				set_to_binary<uint32_t>(chunk.data() + 8, type::IDAT);
 				IDATchunk.assign(chunk.begin() + 4, chunk.end());
 				IDATLoaded = false;

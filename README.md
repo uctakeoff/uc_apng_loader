@@ -35,6 +35,12 @@ for (auto&& frame : frames) {
 }
 ```
 
+### Load to OpenGL Texture
+
+```cpp
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame.image.width(), frame.image.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, frame.image.data());
+```
+
 ### Render Animation
 
 ```cpp

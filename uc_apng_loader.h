@@ -6,8 +6,8 @@ http://opensource.org/licenses/mit-license.php
 */
 #ifndef UC_APNG_LOADER_H
 #define UC_APNG_LOADER_H
-#define UC_APNG_LOADER_VERSION "0.1.0"
-#define UC_APNG_LOADER_VERSION_NUM 0x000100
+#define UC_APNG_LOADER_VERSION "1.0.0"
+#define UC_APNG_LOADER_VERSION_NUM 0x000101
 #ifdef _MSC_VER
 # define _SCL_SECURE_NO_WARNINGS
 #endif

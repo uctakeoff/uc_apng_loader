@@ -17,10 +17,10 @@ http://opensource.org/licenses/mit-license.php
 
 #define TEST_ASSERT(pred) if (!(pred)) throw std::runtime_error(std::string(__func__).append(" : ").append(#pred).append(" : line ").append(std::to_string(__LINE__)))
 
-inline std::vector<char> read_all(const char* filepath)
+inline std::vector<char> read_all(const std::string& filepath)
 {
 	std::vector<char> data;
-	std::ifstream is(filepath, std::ios::in | std::ios::binary);
+	std::ifstream is(filepath.c_str(), std::ios::in | std::ios::binary);
 	if (is.is_open()) {
 		auto pos = is.seekg(0, std::ios::end).tellg();
 		data.resize(static_cast<size_t>(pos));
@@ -29,7 +29,7 @@ inline std::vector<char> read_all(const char* filepath)
 	return data;
 }
 
-template <typename Loader> void test(Loader& loader)
+template <typename Loader> void test(Loader& loader, const std::string& testdir)
 {
 	TEST_ASSERT(loader.width() == 100);
 	TEST_ASSERT(loader.height() == 100);
@@ -43,7 +43,7 @@ template <typename Loader> void test(Loader& loader)
 	}
 
 	for (size_t i = 0; i < frames.size(); i++) {
-		auto outputfile = "test_data/answer" + std::to_string(i) + ".png";
+		auto outputfile = testdir + "/answer" + std::to_string(i) + ".png";
 		int w, h, d;
 		uc::apng::stbi_ptr answerImage(stbi_load(outputfile.c_str(), &w, &h, &d, STBI_rgb_alpha));
 		std::cout << "  frame " << i << " / " << frames.size() << " : " 
@@ -65,18 +65,19 @@ template <typename Loader> void test(Loader& loader)
 
 int main(int argc, char** argv)
 {
+	const std::string testdir = (argc < 2) ? "test_data" : argv[1];
 	try {
 		{
-			auto loader = uc::apng::create_file_loader("test_data/Animated_PNG_example_bouncing_beach_ball.apng");
-			test(loader);
+			auto loader = uc::apng::create_file_loader(testdir + "/Animated_PNG_example_bouncing_beach_ball.apng");
+			test(loader, testdir);
 		}
 		{
-			auto mem_data = read_all("test_data/Animated_PNG_example_bouncing_beach_ball.apng");
+			auto mem_data = read_all(testdir + "/Animated_PNG_example_bouncing_beach_ball.apng");
 			auto loader = uc::apng::create_memory_loader(mem_data.data(), mem_data.size());
-			test(loader);
+			test(loader, testdir);
 		}
 		{
-			auto loader = uc::apng::create_file_loader("test_data/Animated_PNG_example_bouncing_beach_ball0.png");
+			auto loader = uc::apng::create_file_loader(testdir + "/Animated_PNG_example_bouncing_beach_ball0.png");
 			std::cout << "normal png read (" 
 				<< loader.width() << "x" << loader.height() << "), " 
 				<< loader.num_frames() << "frames, " 
@@ -91,7 +92,7 @@ int main(int argc, char** argv)
 			TEST_ASSERT(!loader.has_frame());
 
 			int w, h, d;
-			uc::apng::stbi_ptr answerImage(stbi_load("test_data/answer0.png", &w, &h, &d, STBI_rgb_alpha));
+			uc::apng::stbi_ptr answerImage(stbi_load((testdir + "/answer0.png").c_str(), &w, &h, &d, STBI_rgb_alpha));
 			TEST_ASSERT(answerImage);
 			TEST_ASSERT(frame.is_default);
 			TEST_ASSERT(frame.index == 0);

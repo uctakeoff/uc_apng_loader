@@ -6,7 +6,7 @@ http://opensource.org/licenses/mit-license.php
 */
 #ifndef UC_APNG_LOADER_H
 #define UC_APNG_LOADER_H
-#define UC_APNG_LOADER_VERSION "1.0.0"
+#define UC_APNG_LOADER_VERSION "1.0.1"
 #define UC_APNG_LOADER_VERSION_NUM 0x000101
 #ifdef _MSC_VER
 # define _SCL_SECURE_NO_WARNINGS
@@ -209,33 +209,34 @@ struct stbi_deleter
 using stbi_ptr = std::unique_ptr<stbi_uc, stbi_deleter>;
 
 
-class image 
+class image_t 
 {
 public:
 	constexpr static size_t BPP = 4;
 
-	image() = default;
-	image(image&&) = default;
-	image& operator=(image&&) = default;
+	image_t() = default;
+	image_t(image_t&&) = default;
+	image_t& operator=(image_t&&) = default;
+	~image_t() = default;
 
-	image(const image& obj)
+	image_t(const image_t& obj)
 		: width_(obj.width_), height_(obj.height_), bin(static_cast<stbi_uc*>(malloc(size())))
 	{
 		std::copy(obj.begin(), obj.end(), begin());
 	}
-	image& operator=(const image& obj)
+	image_t& operator=(const image_t& obj)
 	{
 		if (this != &obj) {
-			*this = image(obj);
+			*this = image_t(obj);
 		}
 		return *this;
 	}
-	image(uint32_t w, uint32_t h) 
+	image_t(uint32_t w, uint32_t h) 
 		: width_(w), height_(h), bin(static_cast<stbi_uc*>(malloc(size())))
 	{
 		std::fill(begin(), end(), 0);
 	}
-	image(std::vector<uint8_t>& pngBinData)
+	image_t(std::vector<uint8_t>& pngBinData)
 	{
 		int w, h, d;
 		bin = stbi_ptr(stbi_load_from_memory(pngBinData.data(), static_cast<int>(pngBinData.size()), &w, &h, &d, STBI_rgb_alpha));
@@ -295,13 +296,13 @@ private:
 	uint32_t height_ = 0;
 	stbi_ptr bin {};
 };
-inline void copy_frame(const image& src, image& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+inline void copy_frame(const image_t& src, image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
 	for (uint32_t j = 0; j < h; j++) {
 		std::copy(src.data() + src.offset(0, j), src.data() + src.offset(w, j), dst.data() + dst.offset(x, j + y));
 	}
 }
-inline void over_frame(const image& src, image& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+inline void over_frame(const image_t& src, image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
 	for (uint32_t j = 0; j < h; j++) {
 		auto sp = src.data() + src.offset(0, j);
@@ -323,7 +324,7 @@ inline void over_frame(const image& src, image& dst, uint32_t x, uint32_t y, uin
 		}
 	}
 }
-inline void blend_frame(const image& src, image& dst, const fcTL_payload_t& fcTL)
+inline void blend_frame(const image_t& src, image_t& dst, const fcTL_payload_t& fcTL)
 {
 	if (fcTL.blend_op == blend_op_t::SOURCE) {
 		copy_frame(src, dst, fcTL.x_offset, fcTL.y_offset, fcTL.width, fcTL.height);
@@ -336,7 +337,7 @@ inline void blend_frame(const image& src, image& dst, const fcTL_payload_t& fcTL
 struct frame
 {
 	size_t index;
-	image image;		//!< raw 32bit RGBA image
+	image_t image;		//!< raw 32bit RGBA image
 	uint16_t delay_num;	//!< Frame delay fraction numerator
 	uint16_t delay_den;	//!< Frame delay fraction denominator
 	bool is_default;	//!< true if this image is IDAT frame
@@ -345,14 +346,20 @@ struct frame
 template <typename InputStream> class loader
 {
 public:
-	loader(InputStream&& stream) : stream_(std::move(stream))
+	loader() = default;
+	loader(loader&&) = default;
+	loader(const loader&) = delete;
+	loader& operator=(loader&&) = default;
+	loader& operator=(const loader&) = delete;
+	
+	loader(std::unique_ptr<InputStream>&& stream) : stream_(std::move(stream))
 	{
 		signature_t sig {};
-		stream_.read(reinterpret_cast<char*>(sig.data()), sig.size());
-		UC_APNG_ASSERT(!stream_.fail());
+		stream_->read(reinterpret_cast<char*>(sig.data()), sig.size());
+		UC_APNG_ASSERT(!stream_->fail());
 		UC_APNG_ASSERT(sig == SIGNATURE);
 
-		IHDRchunk = read_chunk(stream_);
+		IHDRchunk = read_chunk(*stream_);
 		IHDRpayload = parse_as_IHDR(IHDRchunk);
 		while ((nowState != state::acTL_LOADED) && !eof()) {
 			load_one_chunk();
@@ -361,6 +368,7 @@ public:
 			acTLpayload.num_frames = 1;	// Normal PNG file loaded.
 		}
 	}
+	~loader() = default;
 	uint32_t width() const noexcept
 	{
 		return IHDRpayload.width;
@@ -391,9 +399,9 @@ public:
 
 		if (nowState == state::fdAT_LOADED) {
 			nowState = state::acTL_LOADED;
-			image newFrame = std::move(frameBuffer);
+			image_t newFrame = std::move(frameBuffer);
 			if (!newFrame) {
-				newFrame = image(width(), height());
+				newFrame = image_t(width(), height());
 			}
 			switch (fcTLpayload.dispose_op) {
 			// no disposal is done on this frame before rendering the next; the contents of the output buffer are left as is.
@@ -404,7 +412,7 @@ public:
 			// the frame's region of the output buffer is to be cleared to fully transparent black before rendering the next frame.
 			case dispose_op_t::BACKGROUND:
 				blend_frame(ret.image, newFrame, fcTLpayload);
-				frameBuffer = image(width(), height());
+				frameBuffer = image_t(width(), height());
 				break;
 			// the frame's region of the output buffer is to be reverted to the previous contents before rendering the next frame.
 			case dispose_op_t::PREVIOUS:
@@ -428,7 +436,7 @@ private:
 		fdAT_LOADED,
 		IEND_LOADED
 	};
-	image construct_image() const
+	image_t construct_image() const
 	{
 		std::vector<uint8_t> data;
 		data.reserve(SIGNATURE.size() + IHDRchunk.size() + IDATchunk.size() + otherChunks.size() + IEND_CHUNK.size());
@@ -437,15 +445,15 @@ private:
 		data.insert(data.end(), IDATchunk.begin(), IDATchunk.end());
 		data.insert(data.end(), otherChunks.begin(), otherChunks.end());
 		data.insert(data.end(), IEND_CHUNK.begin(), IEND_CHUNK.end());
-		return image(data);
+		return image_t(data);
 	}
 	bool eof() const
 	{
-		return (nowState == state::IEND_LOADED) || stream_.eof();
+		return (nowState == state::IEND_LOADED) || stream_->eof();
 	}
 	void load_one_chunk()
 	{
-		auto chunk = read_chunk(stream_);
+		auto chunk = read_chunk(*stream_);
 		switch (get_chunk_type(chunk)) {
 		case type::IEND:
 			nowState = state::IEND_LOADED;
@@ -497,7 +505,7 @@ private:
 		}
 	}
 
-	InputStream stream_;
+	std::unique_ptr<InputStream> stream_;
 	state nowState = state::UNINITIALIZED;
 	std::vector<uint8_t> IHDRchunk;
 	std::vector<uint8_t> IDATchunk;
@@ -505,24 +513,29 @@ private:
 	IHDR_payload_t IHDRpayload;
 	acTL_payload_t acTLpayload {};
 	fcTL_payload_t fcTLpayload {};
-	image frameBuffer;
+	image_t frameBuffer;
 	size_t frameIndex = 0;
 	bool IDATLoaded = false;
 };
 
+template <class T, typename... Args>
+std::unique_ptr<T> make_unique(Args&&... args)
+{
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
 loader<std::ifstream> create_file_loader(const std::string& filename)
 {
-	return loader<std::ifstream>(std::ifstream(filename.c_str(), std::ios::in | std::ios::binary));
+	return loader<std::ifstream>(uc::apng::make_unique<std::ifstream>(filename.c_str(), std::ios::in | std::ios::binary));
 }
 #ifdef _MSC_VER
 loader<std::ifstream> create_file_loader(const std::wstring& filename)
 {
-	return loader<std::ifstream>(std::ifstream(filename.c_str(), std::ios::in | std::ios::binary));
+	return loader<std::ifstream>(uc::apng::make_unique<std::ifstream>(filename.c_str(), std::ios::in | std::ios::binary));
 }
 #endif
 loader<std::istringstream> create_memory_loader(const std::string& data)
 {
-	return loader<std::istringstream>(std::istringstream(data));
+	return loader<std::istringstream>(uc::apng::make_unique<std::istringstream>(data));
 }
 loader<std::istringstream> create_memory_loader(const char* data, size_t dataBytes)
 {

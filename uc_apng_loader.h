@@ -6,8 +6,8 @@ http://opensource.org/licenses/mit-license.php
 */
 #ifndef UC_APNG_LOADER_H
 #define UC_APNG_LOADER_H
-#define UC_APNG_LOADER_VERSION "1.0.1"
-#define UC_APNG_LOADER_VERSION_NUM 0x000101
+#define UC_APNG_LOADER_VERSION "1.0.3"
+#define UC_APNG_LOADER_VERSION_NUM 0x000103
 #ifdef _MSC_VER
 # define _SCL_SECURE_NO_WARNINGS
 #endif
@@ -19,12 +19,14 @@ http://opensource.org/licenses/mit-license.php
 #include <vector>
 #include <memory>
 #include <string>
+#include <utility>
+#include <stdexcept>
 #ifndef STBI_INCLUDE_STB_IMAGE_H
 # include "stb_image.h"
 #endif
 
 #ifndef UC_APNG_LOADER_NO_EXCEPTION
-# define UC_APNG_ASSERT(pred) if (!(pred)) throw uc::apng::exception(std::string(__func__).append(" : ").append(#pred))
+# define UC_APNG_ASSERT(pred) if (!(pred)) throw uc::apng::exception(std::string(__func__).append(" : ").append(#pred).append(" failed."))
 #else
 # define UC_APNG_ASSERT(pred)
 #endif
@@ -336,7 +338,7 @@ inline void blend_frame(const image_t& src, image_t& dst, const fcTL_payload_t& 
 
 struct frame
 {
-	size_t index;
+	size_t index;		//!< frame index
 	image_t image;		//!< raw 32bit RGBA image
 	uint16_t delay_num;	//!< Frame delay fraction numerator
 	uint16_t delay_den;	//!< Frame delay fraction denominator
@@ -369,18 +371,23 @@ public:
 		}
 	}
 	~loader() = default;
+	//! APNG image width
 	uint32_t width() const noexcept
 	{
 		return IHDRpayload.width;
 	}
+	//! APNG image height
 	uint32_t height() const noexcept
 	{
 		return IHDRpayload.height;
 	}
+
+	//! Number of frames
 	uint32_t num_frames() const noexcept
 	{
 		return acTLpayload.num_frames;
 	}
+	//! Number of times to loop this APNG.  0 indicates infinite looping.
 	uint32_t num_plays() const noexcept
 	{
 		return acTLpayload.num_plays;

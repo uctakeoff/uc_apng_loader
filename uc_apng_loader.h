@@ -6,8 +6,8 @@ http://opensource.org/licenses/mit-license.php
 */
 #ifndef UC_APNG_LOADER_H
 #define UC_APNG_LOADER_H
-#define UC_APNG_LOADER_VERSION "1.0.2"
-#define UC_APNG_LOADER_VERSION_NUM 0x000102
+#define UC_APNG_LOADER_VERSION "1.0.3"
+#define UC_APNG_LOADER_VERSION_NUM 0x000103
 #ifdef _MSC_VER
 # define _SCL_SECURE_NO_WARNINGS
 #endif
@@ -26,7 +26,7 @@ http://opensource.org/licenses/mit-license.php
 #endif
 
 #ifndef UC_APNG_LOADER_NO_EXCEPTION
-# define UC_APNG_ASSERT(pred) if (!(pred)) throw uc::apng::exception(std::string(__func__).append(" : ").append(#pred))
+# define UC_APNG_ASSERT(pred) if (!(pred)) throw uc::apng::exception(std::string(__func__).append(" : ").append(#pred).append(" failed."))
 #else
 # define UC_APNG_ASSERT(pred)
 #endif

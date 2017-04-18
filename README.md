@@ -1,15 +1,74 @@
 # uc::apng::loader
 **uc::apng::loader** is a header only C++11  APNG (Animated PNG) decoder.
 
+## Requirements
+
+* C++11 support compiler
+* [stb_image.h](https://github.com/nothings/stb)
+
 ## Example
+
+### source code
+
+```cpp
+// apng2pngs.cpp
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "uc_apng_loader.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
+
+int main(int argc, char** argv)
+{
+    if (argc < 2) {
+        std::cerr << "Usage : " << argv[0] << " [APNG filename]" << std::endl;
+        return 1;
+    }
+    try {
+        auto loader = uc::apng::create_file_loader(argv[1]);
+
+        while (loader.has_frame()) {
+
+            auto frame = loader.next_frame();
+
+            std::ostringstream filename;
+            filename << "out" << std::setw(3) << std::setfill('0') << frame.index << ".png";
+
+            stbi_write_png(filename.str().c_str(), frame.image.width(), frame.image.height(), 
+	        4, frame.image.data(), frame.image.width() * 4);
+        }
+    } catch (std::exception& ex) {
+        std::cout << "failed : " << ex.what() << std::endl;
+    } 
+    return 0;
+}
+```
+### compile
+
+```bash
+$ g++ -std=c++11 apng2pngs.cpp
+```
+
+## Usage
 
 ### Load from APNG file
 
 ```cpp
-auto loader = uc::apng::create_file_loader(filename);
+// from file
+auto loader = uc::apng::create_file_loader("filename.apng");
 
-std::cout << "\"" << filename << "\" " 
-	<< "(" << loader.width() << "x" << loader.height() << "), " 
+// from memory (std::string stringdata)
+auto loader = uc::apng::create_memory_loader(stringData);
+
+// from memory (const char* buf, size_t buflen)
+auto loader = uc::apng::create_memory_loader(buf, buflen);
+
+// member
+std::cout << "(" << loader.width() << "x" << loader.height() << "), " 
 	<< loader.num_frames() << "frames, " 
 	<< loader.num_plays() << " times to loop (0 indicates infinite looping).\n";
 ```
@@ -42,30 +101,6 @@ for (auto&& frame : frames) {
 		0, GL_RGBA, GL_UNSIGNED_BYTE, frame.image.data());
 ```
 
-### Render Animation
-
-```cpp
-for (uint32_t i = 0; (loader.num_plays() == 0) || (i < loader.num_plays()); ++i) {
-
-	for (auto&& frame : frames) {
-
-		//
-		// render frame
-		//
-
-		auto duration = std::chrono::microseconds(1000000) * frame.delay_num / frame.delay_den;
-		std::this_thread::sleep_for(duration);
-	}
-}
-```
-
-
-
-
-## Requirements
-
-* C++11 support compiler
-* [stb_image.h](https://github.com/nothings/stb)
 
 ## Sample Code
 

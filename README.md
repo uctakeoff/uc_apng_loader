@@ -55,7 +55,7 @@ $ g++ -std=c++11 apng2pngs.cpp
 
 ## Usage
 
-### Load from APNG file
+### Load APNG data
 
 ```cpp
 // from file
@@ -73,7 +73,7 @@ std::cout << "(" << loader.width() << "x" << loader.height() << "), "
 	<< loader.num_plays() << " times to loop (0 indicates infinite looping).\n";
 ```
 
-### Load APNG frames
+### Get APNG frames
 
 ```cpp
 std::vector<uc::apng::frame> frames;

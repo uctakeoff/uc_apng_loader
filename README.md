@@ -104,11 +104,17 @@ for (auto&& frame : frames) {
 
 ## Sample Code
 
-### Build & Execute
+### APNG to PNGs Example
 
 ```bash
 $ g++ -std=c++11 apng2pngs.cpp
-$ ./a.out test_data/Animated_PNG_example_bouncing_beach_ball.apng
+$ ./a.out test_data/beach_ball.apng
+```
+
+### Emscripten WebGL Rendering 
+
+```bash
+$ emcc -std=c++11 -s USE_GLFW=3 emglsample.cpp -o glsample.html --preload-file test_data/beach_ball.apng
 ```
 
 ## Test

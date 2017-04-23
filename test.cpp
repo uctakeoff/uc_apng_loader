@@ -67,16 +67,16 @@ int main(int argc, char** argv)
 	const std::string testdir = (argc < 2) ? "test_data" : argv[1];
 	try {
 		{
-			auto loader = uc::apng::create_file_loader(testdir + "/Animated_PNG_example_bouncing_beach_ball.apng");
+			auto loader = uc::apng::create_file_loader(testdir + "/beach_ball.apng");
 			test(loader, testdir);
 		}
 		{
-			auto mem_data = read_all(testdir + "/Animated_PNG_example_bouncing_beach_ball.apng");
+			auto mem_data = read_all(testdir + "/beach_ball.apng");
 			auto loader = uc::apng::create_memory_loader(mem_data.data(), mem_data.size());
 			test(loader, testdir);
 		}
 		{
-			auto loader = uc::apng::create_file_loader(testdir + "/Animated_PNG_example_bouncing_beach_ball0.png");
+			auto loader = uc::apng::create_file_loader(testdir + "/beach_ball0.png");
 			std::cout << "normal png read (" 
 				<< loader.width() << "x" << loader.height() << "), " 
 				<< loader.num_frames() << "frames, " 

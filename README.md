@@ -69,11 +69,17 @@ for (uint32_t i = 0; (loader.num_plays() == 0) || (i < loader.num_plays()); ++i)
 
 ## Sample Code
 
-### Build & Execute
+### APNG to PNGs Example
 
 ```bash
 $ g++ -std=c++11 apng2pngs.cpp
 $ ./a.out test_data/beach_ball.apng
+```
+
+### Emscripten WebGL Rendering 
+
+```bash
+$ emcc -std=c++11 -s USE_GLFW=3 emglsample.cpp -o glsample.html --preload-file test_data/beach_ball.apng
 ```
 
 ## Test

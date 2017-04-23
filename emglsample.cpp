@@ -4,6 +4,10 @@ Copyright (c) 2017, Kentaro Ushiyama
 This software is released under the MIT License.
 http://opensource.org/licenses/mit-license.php
 */
+#define GL_GLEXT_PROTOTYPES
+#define EGL_EGLEXT_PROTOTYPES
+#include <emscripten/emscripten.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include"uc_apng_loader.h"
 
@@ -14,11 +18,7 @@ http://opensource.org/licenses/mit-license.php
 #include <vector>
 #include <string>
 #include <chrono>
-#include <thread>
-#if defined(_MSC_VER)
-#include <GL/glew.h>
-#include <GL/wglew.h>
-#endif
+#include <functional>
 #include <GLFW/glfw3.h>
 
 namespace
@@ -34,6 +34,9 @@ namespace
 			})";
 
 	const std::string FRAGMENT_SHADER = R"(
+			#ifdef GL_ES
+			precision mediump float;
+			#endif
 			varying vec2 v_texCoord;
 			uniform sampler2D s_texture;
 			void main()
@@ -59,14 +62,21 @@ namespace
 		glDeleteShader(sh);
 		if (compiled == GL_FALSE) throw std::runtime_error(msg.data());
 	}
+
+	void render_frame(void* f)
+	{
+		(*static_cast<std::function<void()>*>(f))();
+	}
 }
 
 int main(int argc, char** argv)
 {
+#if 0
 	if (argc < 2) {
 		std::cerr << "Usage : " << argv[0] << " [APNG filename]" << std::endl;
 		return 1;
 	}
+#endif
 	if (!glfwInit()) {
 		std::cerr << "Error : glfwInit() failed." << std::endl;
 		return -1;
@@ -75,10 +85,11 @@ int main(int argc, char** argv)
 		uint32_t remainPlay{};
 		std::vector<uc::apng::frame> frames;
 		{
-			auto loader = uc::apng::create_file_loader(argv[1]);
+			const std::string filename = "./test_data/beach_ball.apng";
+			auto loader = uc::apng::create_file_loader(filename);
 			remainPlay = loader.num_plays();
 
-			std::cout << "\n\"" << argv[1] << "\" ("
+			std::cout << "\n\"" << filename << "\" ("
 				<< loader.width() << "x" << loader.height() << "), "
 				<< loader.num_frames() << "frames, "
 				<< loader.num_plays() << " times to loop (0 indicates infinite looping).\n";
@@ -90,17 +101,12 @@ int main(int argc, char** argv)
 		}
 		auto frame = frames.begin();
 
-		GLFWwindow* window = glfwCreateWindow(frame->image.width(), frame->image.height(), "apng player", nullptr, nullptr);
+		auto window = glfwCreateWindow(frame->image.width(), frame->image.height(), "apng player", nullptr, nullptr);
 		if (!window) throw std::runtime_error("glfwCreateWindow() failed.");
 
 		glfwMakeContextCurrent(window);
-#ifdef __glew_h__
-		glewExperimental = TRUE;
-		GLenum err = glewInit();
-		if (err != GLEW_OK) throw std::runtime_error("glewInit() failed.");
-#endif
 
-		GLuint prg = glCreateProgram();
+		auto prg = glCreateProgram();
 		loadShader(prg, GL_VERTEX_SHADER, VERTEX_SHADER);
 		loadShader(prg, GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
 		glLinkProgram(prg);
@@ -149,28 +155,36 @@ int main(int argc, char** argv)
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-		auto nowTime = std::chrono::high_resolution_clock::now();
-		while (!glfwWindowShouldClose(window)) {
-			auto nextTime = nowTime + std::chrono::microseconds(1000000) * frame->delay_num / frame->delay_den;
+        using namespace std::chrono;
+        auto nextTime = high_resolution_clock::now();
+        nextTime += microseconds(1000000) * frame->delay_num / frame->delay_den;
 
-			glClear(GL_COLOR_BUFFER_BIT);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame->image.width(), frame->image.height(), 
-				0, GL_RGBA, GL_UNSIGNED_BYTE, frame->image.data());
-			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
-			glfwSwapBuffers(window);
+		std::function<void()> render_func = [&window, &frames, &frame, &remainPlay, &nextTime] {
+            bool updated = false;
+            const auto nowTime = high_resolution_clock::now();
+            while (nextTime < nowTime) {
+                updated = true;
+                ++frame;
+                if (frame == frames.end()) {
+                    if (remainPlay > 0 && --remainPlay == 0) {
+                        emscripten_cancel_main_loop();
+                    }
+                    frame = frames.begin();
+                }
+                nextTime += microseconds(1000000) * frame->delay_num / frame->delay_den;
+            }
+            if (updated) {
+    			glClear(GL_COLOR_BUFFER_BIT);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame->image.width(), frame->image.height(), 
+                    0, GL_RGBA, GL_UNSIGNED_BYTE, frame->image.data());
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+                glfwSwapBuffers(window);
+            }
 			glfwPollEvents();
+		};
+		emscripten_set_main_loop_arg(render_frame, &render_func, 60, 1);
 
-			++frame;
-			if (frame == frames.end()) {
-				if (remainPlay > 0 && --remainPlay == 0) {
-					break;
-				}
-				frame = frames.begin();
-			}
-			std::this_thread::sleep_until(nextTime);
-			nowTime = std::chrono::high_resolution_clock::now();
-		}
-
+		// It is not executed below this.
 		glDisableVertexAttribArray(texCoordLoc);
 		glDisableVertexAttribArray(positionLoc);
 		glDeleteTextures(1, &tex);

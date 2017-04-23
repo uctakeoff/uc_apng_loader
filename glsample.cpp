@@ -34,6 +34,9 @@ namespace
 			})";
 
 	const std::string FRAGMENT_SHADER = R"(
+			#ifdef GL_ES
+			precision mediump float;
+			#endif
 			varying vec2 v_texCoord;
 			uniform sampler2D s_texture;
 			void main()
@@ -75,10 +78,11 @@ int main(int argc, char** argv)
 		uint32_t remainPlay{};
 		std::vector<uc::apng::frame> frames;
 		{
-			auto loader = uc::apng::create_file_loader(argv[1]);
+			const std::string filename = argv[1];
+			auto loader = uc::apng::create_file_loader(filename);
 			remainPlay = loader.num_plays();
 
-			std::cout << "\n\"" << argv[1] << "\" ("
+			std::cout << "\n\"" << filename << "\" ("
 				<< loader.width() << "x" << loader.height() << "), "
 				<< loader.num_frames() << "frames, "
 				<< loader.num_plays() << " times to loop (0 indicates infinite looping).\n";
@@ -90,7 +94,7 @@ int main(int argc, char** argv)
 		}
 		auto frame = frames.begin();
 
-		GLFWwindow* window = glfwCreateWindow(frame->image.width(), frame->image.height(), "apng player", nullptr, nullptr);
+		auto window = glfwCreateWindow(frame->image.width(), frame->image.height(), "apng player", nullptr, nullptr);
 		if (!window) throw std::runtime_error("glfwCreateWindow() failed.");
 
 		glfwMakeContextCurrent(window);
@@ -100,7 +104,7 @@ int main(int argc, char** argv)
 		if (err != GLEW_OK) throw std::runtime_error("glewInit() failed.");
 #endif
 
-		GLuint prg = glCreateProgram();
+		auto prg = glCreateProgram();
 		loadShader(prg, GL_VERTEX_SHADER, VERTEX_SHADER);
 		loadShader(prg, GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
 		glLinkProgram(prg);
@@ -149,10 +153,11 @@ int main(int argc, char** argv)
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-		auto nowTime = std::chrono::high_resolution_clock::now();
-		while (!glfwWindowShouldClose(window)) {
-			auto nextTime = nowTime + std::chrono::microseconds(1000000) * frame->delay_num / frame->delay_den;
+        using namespace std::chrono;
+        auto nextTime = high_resolution_clock::now();
+        nextTime += microseconds(1000000) * frame->delay_num / frame->delay_den;
 
+		while (!glfwWindowShouldClose(window)) {
 			glClear(GL_COLOR_BUFFER_BIT);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame->image.width(), frame->image.height(), 
 				0, GL_RGBA, GL_UNSIGNED_BYTE, frame->image.data());
@@ -168,7 +173,7 @@ int main(int argc, char** argv)
 				frame = frames.begin();
 			}
 			std::this_thread::sleep_until(nextTime);
-			nowTime = std::chrono::high_resolution_clock::now();
+			nextTime += microseconds(1000000) * frame->delay_num / frame->delay_den;
 		}
 
 		glDisableVertexAttribArray(texCoordLoc);

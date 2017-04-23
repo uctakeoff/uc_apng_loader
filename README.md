@@ -73,7 +73,7 @@ for (uint32_t i = 0; (loader.num_plays() == 0) || (i < loader.num_plays()); ++i)
 
 ```bash
 $ g++ -std=c++11 apng2pngs.cpp
-$ ./a.out test_data/Animated_PNG_example_bouncing_beach_ball.apng
+$ ./a.out test_data/beach_ball.apng
 ```
 
 ## Test

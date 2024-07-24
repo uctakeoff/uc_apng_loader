@@ -6,7 +6,7 @@ http://opensource.org/licenses/mit-license.php
 */
 #ifndef UC_APNG_LOADER_H
 #define UC_APNG_LOADER_H
-#define UC_APNG_LOADER_VERSION "1.0.3"
+#define UC_APNG_LOADER_VERSION "1.0.4"
 #define UC_APNG_LOADER_VERSION_NUM 0x000103
 #ifdef _MSC_VER
 # define _SCL_SECURE_NO_WARNINGS
@@ -530,21 +530,21 @@ std::unique_ptr<T> make_unique(Args&&... args)
 {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
-loader<std::ifstream> create_file_loader(const std::string& filename)
+inline loader<std::ifstream> create_file_loader(const std::string& filename)
 {
 	return loader<std::ifstream>(uc::apng::make_unique<std::ifstream>(filename.c_str(), std::ios::in | std::ios::binary));
 }
 #ifdef _MSC_VER
-loader<std::ifstream> create_file_loader(const std::wstring& filename)
+inline loader<std::ifstream> create_file_loader(const std::wstring& filename)
 {
 	return loader<std::ifstream>(uc::apng::make_unique<std::ifstream>(filename.c_str(), std::ios::in | std::ios::binary));
 }
 #endif
-loader<std::istringstream> create_memory_loader(const std::string& data)
+inline loader<std::istringstream> create_memory_loader(const std::string& data)
 {
 	return loader<std::istringstream>(uc::apng::make_unique<std::istringstream>(data));
 }
-loader<std::istringstream> create_memory_loader(const char* data, size_t dataBytes)
+inline loader<std::istringstream> create_memory_loader(const char* data, size_t dataBytes)
 {
 	return create_memory_loader(std::string(data, dataBytes));
 }

@@ -123,6 +123,7 @@ namespace type
 	constexpr uint32_t acTL = 0x6163544C;
 	constexpr uint32_t fcTL = 0x6663544C;
 	constexpr uint32_t fdAT = 0x66644154;
+	constexpr uint32_t tRNS = 0x74524E53;
 }
 
 
@@ -504,6 +505,14 @@ private:
 				set_to_binary<uint32_t>(chunk.data() + 8, type::IDAT);
 				IDATchunk.assign(chunk.begin() + 4, chunk.end());
 				IDATLoaded = false;
+			}
+			break;
+		case type::tRNS:
+			// tRNS is prohibited for colour types with a full alpha channel (4 and 6).
+			// stb_image rejects frames carrying such a stale chunk as corrupt
+			// ("tRNS with alpha"), so only keep it where it is valid.
+			if ((IHDRpayload.color_type != 4) && (IHDRpayload.color_type != 6)) {
+				otherChunks.insert(otherChunks.end(), chunk.begin(), chunk.end());
 			}
 			break;
 		default:

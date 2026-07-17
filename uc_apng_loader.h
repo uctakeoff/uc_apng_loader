@@ -241,11 +241,17 @@ public:
 	}
 	image_t(std::vector<uint8_t>& pngBinData)
 	{
-		int w, h, d;
+		int w = 0, h = 0, d = 0;
 		bin = stbi_ptr(stbi_load_from_memory(pngBinData.data(), static_cast<int>(pngBinData.size()), &w, &h, &d, STBI_rgb_alpha));
-		width_ = w;
-		height_ = h;
-		UC_APNG_ASSERT(d == BPP);
+		// STBI_rgb_alpha forces 4-channel output whatever the source's channel
+		// count (d), so asserting d == BPP wrongly rejected any non-RGBA source.
+		// Check that the decode succeeded instead, and only adopt the dimensions
+		// on success so a failed decode stays a falsy 0x0 image.
+		if (bin) {
+			width_ = static_cast<uint32_t>(w);
+			height_ = static_cast<uint32_t>(h);
+		}
+		UC_APNG_ASSERT(static_cast<bool>(bin));
 	}
 
     explicit operator bool() const noexcept

@@ -456,8 +456,10 @@ private:
 		data.reserve(SIGNATURE.size() + IHDRchunk.size() + IDATchunk.size() + otherChunks.size() + IEND_CHUNK.size());
 		data.insert(data.end(), SIGNATURE.begin(), SIGNATURE.end());
 		data.insert(data.end(), IHDRchunk.begin(), IHDRchunk.end());
-		data.insert(data.end(), IDATchunk.begin(), IDATchunk.end());
+		// otherChunks holds PLTE/tRNS, which the PNG spec requires before IDAT;
+		// emitting them after made stb fail palette frames with "no PLTE".
 		data.insert(data.end(), otherChunks.begin(), otherChunks.end());
+		data.insert(data.end(), IDATchunk.begin(), IDATchunk.end());
 		data.insert(data.end(), IEND_CHUNK.begin(), IEND_CHUNK.end());
 		return image_t(data);
 	}

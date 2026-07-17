@@ -305,14 +305,25 @@ private:
 	uint32_t height_ = 0;
 	stbi_ptr bin {};
 };
+// The fcTL bounds checks in load_one_chunk are only UC_APNG_ASSERTs, which are
+// no-ops in UC_APNG_LOADER_NO_EXCEPTION builds, so a malformed fcTL offset/size
+// (or a failed 0x0 decode) can still reach the blitters. Clamp the region to
+// both buffers so they can never read past src or write past dst; no-ops on
+// well-formed input. (std::min) is parenthesised to dodge min/max macros.
 inline void copy_frame(const image_t& src, image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
+	if (x >= dst.width() || y >= dst.height()) return;
+	w = (std::min)(w, (std::min)(dst.width() - x, src.width()));
+	h = (std::min)(h, (std::min)(dst.height() - y, src.height()));
 	for (uint32_t j = 0; j < h; j++) {
 		std::copy(src.data() + src.offset(0, j), src.data() + src.offset(w, j), dst.data() + dst.offset(x, j + y));
 	}
 }
 inline void over_frame(const image_t& src, image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
+	if (x >= dst.width() || y >= dst.height()) return;
+	w = (std::min)(w, (std::min)(dst.width() - x, src.width()));
+	h = (std::min)(h, (std::min)(dst.height() - y, src.height()));
 	for (uint32_t j = 0; j < h; j++) {
 		auto sp = src.data() + src.offset(0, j);
 		auto dp = dst.data() + dst.offset(x, j + y);
@@ -339,6 +350,16 @@ inline void blend_frame(const image_t& src, image_t& dst, const fcTL_payload_t& 
 		copy_frame(src, dst, fcTL.x_offset, fcTL.y_offset, fcTL.width, fcTL.height);
 	} else {
 		over_frame(src, dst, fcTL.x_offset, fcTL.y_offset, fcTL.width, fcTL.height);
+	}
+}
+// clear a sub-region of dst to fully transparent black (APNG_DISPOSE_OP_BACKGROUND)
+inline void clear_frame(image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+{
+	if (x >= dst.width() || y >= dst.height()) return;
+	w = (std::min)(w, dst.width() - x);
+	h = (std::min)(h, dst.height() - y);
+	for (uint32_t j = 0; j < h; j++) {
+		std::fill(dst.data() + dst.offset(x, j + y), dst.data() + dst.offset(x + w, j + y), static_cast<uint8_t>(0));
 	}
 }
 
@@ -426,15 +447,23 @@ public:
 			// the frame's region of the output buffer is to be cleared to fully transparent black before rendering the next frame.
 			case dispose_op_t::BACKGROUND:
 				blend_frame(ret.image, newFrame, fcTLpayload);
-				frameBuffer = image_t(width(), height());
+				// only this frame's region is cleared, not the whole canvas
+				frameBuffer = newFrame;
+				clear_frame(frameBuffer, fcTLpayload.x_offset, fcTLpayload.y_offset, fcTLpayload.width, fcTLpayload.height);
 				break;
 			// the frame's region of the output buffer is to be reverted to the previous contents before rendering the next frame.
 			case dispose_op_t::PREVIOUS:
 				frameBuffer = newFrame;
 				blend_frame(ret.image, newFrame, fcTLpayload);
 				break;
+			// parse_as_fcTL only checks dispose with UC_APNG_ASSERT, a no-op in
+			// UC_APNG_LOADER_NO_EXCEPTION builds, so a corrupt value can reach
+			// this switch - and throwing here terminates exactly those builds.
+			// Fall back to NONE semantics instead.
 			default:
-				throw exception("apng::next_frame : unknown apng::dispose_op_t");
+				blend_frame(ret.image, newFrame, fcTLpayload);
+				frameBuffer = newFrame;
+				break;
 			}
 			ret.image = std::move(newFrame);
 		}

@@ -123,6 +123,7 @@ namespace type
 	constexpr uint32_t acTL = 0x6163544C;
 	constexpr uint32_t fcTL = 0x6663544C;
 	constexpr uint32_t fdAT = 0x66644154;
+	constexpr uint32_t tRNS = 0x74524E53;
 }
 
 
@@ -240,11 +241,17 @@ public:
 	}
 	image_t(std::vector<uint8_t>& pngBinData)
 	{
-		int w, h, d;
+		int w = 0, h = 0, d = 0;
 		bin = stbi_ptr(stbi_load_from_memory(pngBinData.data(), static_cast<int>(pngBinData.size()), &w, &h, &d, STBI_rgb_alpha));
-		width_ = w;
-		height_ = h;
-		UC_APNG_ASSERT(d == BPP);
+		// STBI_rgb_alpha forces 4-channel output whatever the source's channel
+		// count (d), so asserting d == BPP wrongly rejected any non-RGBA source.
+		// Check that the decode succeeded instead, and only adopt the dimensions
+		// on success so a failed decode stays a falsy 0x0 image.
+		if (bin) {
+			width_ = static_cast<uint32_t>(w);
+			height_ = static_cast<uint32_t>(h);
+		}
+		UC_APNG_ASSERT(static_cast<bool>(bin));
 	}
 
     explicit operator bool() const noexcept
@@ -298,14 +305,25 @@ private:
 	uint32_t height_ = 0;
 	stbi_ptr bin {};
 };
+// The fcTL bounds checks in load_one_chunk are only UC_APNG_ASSERTs, which are
+// no-ops in UC_APNG_LOADER_NO_EXCEPTION builds, so a malformed fcTL offset/size
+// (or a failed 0x0 decode) can still reach the blitters. Clamp the region to
+// both buffers so they can never read past src or write past dst; no-ops on
+// well-formed input. (std::min) is parenthesised to dodge min/max macros.
 inline void copy_frame(const image_t& src, image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
+	if (x >= dst.width() || y >= dst.height()) return;
+	w = (std::min)(w, (std::min)(dst.width() - x, src.width()));
+	h = (std::min)(h, (std::min)(dst.height() - y, src.height()));
 	for (uint32_t j = 0; j < h; j++) {
 		std::copy(src.data() + src.offset(0, j), src.data() + src.offset(w, j), dst.data() + dst.offset(x, j + y));
 	}
 }
 inline void over_frame(const image_t& src, image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
+	if (x >= dst.width() || y >= dst.height()) return;
+	w = (std::min)(w, (std::min)(dst.width() - x, src.width()));
+	h = (std::min)(h, (std::min)(dst.height() - y, src.height()));
 	for (uint32_t j = 0; j < h; j++) {
 		auto sp = src.data() + src.offset(0, j);
 		auto dp = dst.data() + dst.offset(x, j + y);
@@ -332,6 +350,16 @@ inline void blend_frame(const image_t& src, image_t& dst, const fcTL_payload_t& 
 		copy_frame(src, dst, fcTL.x_offset, fcTL.y_offset, fcTL.width, fcTL.height);
 	} else {
 		over_frame(src, dst, fcTL.x_offset, fcTL.y_offset, fcTL.width, fcTL.height);
+	}
+}
+// clear a sub-region of dst to fully transparent black (APNG_DISPOSE_OP_BACKGROUND)
+inline void clear_frame(image_t& dst, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+{
+	if (x >= dst.width() || y >= dst.height()) return;
+	w = (std::min)(w, dst.width() - x);
+	h = (std::min)(h, dst.height() - y);
+	for (uint32_t j = 0; j < h; j++) {
+		std::fill(dst.data() + dst.offset(x, j + y), dst.data() + dst.offset(x + w, j + y), static_cast<uint8_t>(0));
 	}
 }
 
@@ -419,15 +447,23 @@ public:
 			// the frame's region of the output buffer is to be cleared to fully transparent black before rendering the next frame.
 			case dispose_op_t::BACKGROUND:
 				blend_frame(ret.image, newFrame, fcTLpayload);
-				frameBuffer = image_t(width(), height());
+				// only this frame's region is cleared, not the whole canvas
+				frameBuffer = newFrame;
+				clear_frame(frameBuffer, fcTLpayload.x_offset, fcTLpayload.y_offset, fcTLpayload.width, fcTLpayload.height);
 				break;
 			// the frame's region of the output buffer is to be reverted to the previous contents before rendering the next frame.
 			case dispose_op_t::PREVIOUS:
 				frameBuffer = newFrame;
 				blend_frame(ret.image, newFrame, fcTLpayload);
 				break;
+			// parse_as_fcTL only checks dispose with UC_APNG_ASSERT, a no-op in
+			// UC_APNG_LOADER_NO_EXCEPTION builds, so a corrupt value can reach
+			// this switch - and throwing here terminates exactly those builds.
+			// Fall back to NONE semantics instead.
 			default:
-				throw exception("apng::next_frame : unknown apng::dispose_op_t");
+				blend_frame(ret.image, newFrame, fcTLpayload);
+				frameBuffer = newFrame;
+				break;
 			}
 			ret.image = std::move(newFrame);
 		}
@@ -449,8 +485,10 @@ private:
 		data.reserve(SIGNATURE.size() + IHDRchunk.size() + IDATchunk.size() + otherChunks.size() + IEND_CHUNK.size());
 		data.insert(data.end(), SIGNATURE.begin(), SIGNATURE.end());
 		data.insert(data.end(), IHDRchunk.begin(), IHDRchunk.end());
-		data.insert(data.end(), IDATchunk.begin(), IDATchunk.end());
+		// otherChunks holds PLTE/tRNS, which the PNG spec requires before IDAT;
+		// emitting them after made stb fail palette frames with "no PLTE".
 		data.insert(data.end(), otherChunks.begin(), otherChunks.end());
+		data.insert(data.end(), IDATchunk.begin(), IDATchunk.end());
 		data.insert(data.end(), IEND_CHUNK.begin(), IEND_CHUNK.end());
 		return image_t(data);
 	}
@@ -504,6 +542,14 @@ private:
 				set_to_binary<uint32_t>(chunk.data() + 8, type::IDAT);
 				IDATchunk.assign(chunk.begin() + 4, chunk.end());
 				IDATLoaded = false;
+			}
+			break;
+		case type::tRNS:
+			// tRNS is prohibited for colour types with a full alpha channel (4 and 6).
+			// stb_image rejects frames carrying such a stale chunk as corrupt
+			// ("tRNS with alpha"), so only keep it where it is valid.
+			if ((IHDRpayload.color_type != 4) && (IHDRpayload.color_type != 6)) {
+				otherChunks.insert(otherChunks.end(), chunk.begin(), chunk.end());
 			}
 			break;
 		default:
